@@ -127,5 +127,43 @@ tab_mob_dom_trav_pop <- rbind(tab_mob_dom_trav_pop, flux_a_ajouter)
 # Sauvegarde des flux de population
 # Vérification
 summary(duplicated(tab_mob_dom_trav_pop[ , c("dom", "trav")]))
+
+# Mise en forme
+tab_mob_dom_trav_pop$dom <- as.character(tab_mob_dom_trav_pop$dom)
+tab_mob_dom_trav_pop$trav <- as.character(tab_mob_dom_trav_pop$trav)
+tab_mob_dom_trav_pop$pop <- as.character(tab_mob_dom_trav_pop$pop)
+
 # Pas de doublon!
 # saveRDS(object = tab_mob_dom_trav_pop, file = "flux_pop_jour.rds")
+
+
+# Etape 2 : Construction des mouvements entre bassins de vie
+
+# Etape 2.1 : Récupération des données
+# Mobilité intercommunale
+tab_mob_dom_trav_pop <- readRDS(file = "flux_pop_jour.rds")
+
+# Composition communale 2017 des BV 2012
+bv_2012 <- read.csv(file = "bv_2012.csv", header = TRUE, sep = ";", stringsAsFactors = FALSE)
+names(bv_2012) <- tolower(names(bv_2012))
+bv_2012 <- bv_2012[! bv_2012$codgeo %in% c("75056", "69123", "13055"), ]
+bv_2012 <- bv_2012[substr(bv_2012$codgeo, 1, 2) != "97", ]
+
+
+# Etape 2.2 : Ajout des bassins de vie dans la table de mobilité
+tab_mob_dom_trav_pop$bv_dom <- setNames(bv_2012$bv2012, bv_2012$codgeo)[tab_mob_dom_trav_pop$dom]
+tab_mob_dom_trav_pop$bv_trav <- setNames(bv_2012$bv2012, bv_2012$codgeo)[tab_mob_dom_trav_pop$trav]
+
+summary(is.na(tab_mob_dom_trav_pop$bv_dom))
+summary(is.na(tab_mob_dom_trav_pop$bv_trav))
+
+
+# Etape 2.3 : Construction de la table de mobilité entre bassins de vie
+tab_mob_dom_trav_pop$bv_dom_trav_pop <- paste0(tab_mob_dom_trav_pop$bv_dom, "_", tab_mob_dom_trav_pop$bv_trav, "_", tab_mob_dom_trav_pop$pop)
+mob_bv <- tapply(tab_mob_dom_trav_pop$flux, tab_mob_dom_trav_pop$bv_dom_trav_pop, sum)
+tab_mob_bv_dom_trav_pop <- data.frame(dom = substr(names(mob_bv), 1, 5), trav = substr(names(mob_bv), 7, 11), pop = substr(names(mob_bv), 13, nchar(names(mob_bv))), flux = mob_bv)
+
+
+# Etape 2.4 : Export
+# saveRDS(object = tab_mob_bv_dom_trav_pop, file = "flux_bv_pop_jour.rds")
+

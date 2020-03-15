@@ -6,10 +6,8 @@ setwd("C:/Users/nicol/Desktop/Données recensement")
 source("fonctions_elementaires.R")
 
 # Chargement des données
-mob_dom_trav_clust <- readRDS("flux_pop_jour.rds")
+mob_dom_trav_clust <- readRDS("flux_bv_pop_jour.rds")
 summary(mob_dom_trav_clust$trav %in% mob_dom_trav_clust$dom)
-# Pour les 601 lignes où la commune de travail n'existe pas dans les communes de domicile, on l'impute à la commune de domicile
-mob_dom_trav_clust$trav[!mob_dom_trav_clust$trav %in% mob_dom_trav_clust$dom] <- mob_dom_trav_clust$dom[!mob_dom_trav_clust$trav %in% mob_dom_trav_clust$dom]
 mob_dom_trav_clust$dom <- as.character(mob_dom_trav_clust$dom )
 mob_dom_trav_clust$trav <- as.character(mob_dom_trav_clust$trav )
 mob_dom_trav_clust$pop <- as.character(mob_dom_trav_clust$pop )
@@ -20,15 +18,15 @@ mob_dom_trav_clust$pop <- as.character(mob_dom_trav_clust$pop )
 # Pas de saturation des hôpitaux ici
 # On pourra complexifier quand on disposera du nombre de lits par département
 
-liste_com <- unique(as.character(mob_dom_trav_clust$dom))
-v_satur_hop <- setNames(rep(0, length(liste_com)), liste_com)
+liste_clust <- unique(as.character(mob_dom_trav_clust$dom))
+v_satur_hop <- setNames(rep(0, length(liste_clust)), liste_clust)
 
 # Etape 2 : fonction de modélisation d'une journée
 
 modele_journee <- function(pays, v_clust, flux_clust, contag, v_prob_sain, mat_prob_contact, mat_contact, d, g, v_prob_grav, v_satur_hop, mat_tx_mort){
   
-  # pays = lapply(setNames(liste_com, liste_com), function(x) cluster_test); v_clust = liste_com; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); mat_prob_contact = rbind(c(0.5, 0.5), c(0.1, 0.9)); d = 4; g = 7; mat_contact = matrix(c(rep(20, length(v_clust)), rep(100, length(v_clust))) , nrow = length(v_clust), dimnames = list(v_clust, c("vulnérable", "résistant"))); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
-  # pays = lapply(setNames(liste_com, liste_com), function(x) list(vulnérable = pop_test_2, résistant = pop_test_2) ); v_clust = liste_com; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); mat_prob_contact = rbind(c(0.5, 0.5), c(0.1, 0.9)); d = 4; g = 7; mat_contact = matrix(c(rep(20, length(v_clust)), rep(100, length(v_clust))) , nrow = length(v_clust), dimnames = list(v_clust, c("vulnérable", "résistant"))); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
+  # pays = lapply(setNames(liste_clust, liste_clust), function(x) cluster_test); v_clust = liste_clust; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); mat_prob_contact = rbind(c(0.5, 0.5), c(0.1, 0.9)); d = 4; g = 7; mat_contact = matrix(c(rep(20, length(v_clust)), rep(100, length(v_clust))) , nrow = length(v_clust), dimnames = list(v_clust, c("vulnérable", "résistant"))); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
+  # pays = lapply(setNames(liste_clust, liste_clust), function(x) list(vulnérable = pop_test_2, résistant = pop_test_2) ); v_clust = liste_clust; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); mat_prob_contact = rbind(c(0.5, 0.5), c(0.1, 0.9)); d = 4; g = 7; mat_contact = matrix(c(rep(20, length(v_clust)), rep(100, length(v_clust))) , nrow = length(v_clust), dimnames = list(v_clust, c("vulnérable", "résistant"))); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
   
   # Etape 2.1 : Vérifications
   if(ncol(v_flux_clust) != 4 | any( !names(v_flux_clust) %in% c("dom", "trav", "pop", "flux"))) stop("La structure de l'objet v_flux_clust n'est pas celle attendue.")
@@ -40,7 +38,6 @@ modele_journee <- function(pays, v_clust, flux_clust, contag, v_prob_sain, mat_p
   # Etape 2.2 : départ vers un cluster pour les non contaminés, les malades non déclarés et les porteurs sains
   
   depart_trav <- lapply(setNames(names(pays), names(pays)), function(clust) depart_clust(nom_cluster = clust, pays[[clust]], flux_clust = v_flux_clust[v_flux_clust$dom == clust, ]))
-  
   
   
     
