@@ -25,6 +25,9 @@ summary(! mob_dom_trav$dclt %in% mob_dom_trav$commune)
 dclt_pas_ds_com <- !mob_dom_trav$dclt %in% mob_dom_trav$commune
 mob_dom_trav$dclt[dclt_pas_ds_com] <- mob_dom_trav$commune[dclt_pas_ds_com]
 
+# Suppression des déplacements vers l'outremer
+mob_dom_trav$dclt[substr(mob_dom_trav$dclt, 1, 2) == "97"] <- mob_dom_trav$commune[substr(mob_dom_trav$dclt, 1, 2) == "97"] 
+
 # Allègement de la base
 mob_dom_trav <- mob_dom_trav[mob_dom_trav$metrodom == "M" , c("commune", "dclt", "agerevq", "cs1", "trans", "ipondi")]
 
@@ -75,8 +78,10 @@ row.names(tab_mob_dom_trav_moins_15) <- paste0(tab_mob_dom_trav_moins_15$dom, "_
 
 # Etape 1.3 : Calcul du nombre de 15 ans à 64 ans qui ne sont pas actifs occupés
 # Ici, c'est une population résistante mais immobile
+actif_ou_age_65_plus <- c(colnames(rp_stat_act)[substr(colnames(rp_stat_act), 22, 23) == "11"], colnames(rp_stat_act)[substr(colnames(rp_stat_act), 13, 15) == "065"])
+
 nb_15_64_non_act_occ <- setNames(
-  apply(rp_stat_act[, ! names(rp_stat_act) %in% c("codgeo", "libgeo")], 1, sum) - rp_stat_act$sexe1_ageq65065_tactr12 - rp_stat_act$sexe1_ageq65065_tactr21 - rp_stat_act$sexe1_ageq65065_tactr22 - rp_stat_act$sexe1_ageq65065_tactr24 - rp_stat_act$sexe1_ageq65065_tactr26 - rp_stat_act$sexe2_ageq65065_tactr12 - rp_stat_act$sexe2_ageq65065_tactr21 - rp_stat_act$sexe2_ageq65065_tactr22 - rp_stat_act$sexe2_ageq65065_tactr24 - rp_stat_act$sexe2_ageq65065_tactr26
+  apply(rp_stat_act[, ! names(rp_stat_act) %in% c("codgeo", "libgeo", actif_ou_age_65_plus)], 1, sum)
   , rp_stat_act$codgeo
 )
 tab_mob_dom_trav_15_64_non_act_occ <- data.frame(dom = names(nb_15_64_non_act_occ), trav = names(nb_15_64_non_act_occ), pop = "résistant", flux = nb_15_64_non_act_occ)
@@ -92,7 +97,7 @@ nb_65_plus_non_act_occ <- setNames(
 tab_mob_dom_trav_65_plus_non_act_occ <- data.frame(dom = names(nb_65_plus_non_act_occ), trav = names(nb_65_plus_non_act_occ), pop = "vulnérable", flux = nb_65_plus_non_act_occ)
 row.names(tab_mob_dom_trav_65_plus_non_act_occ) <- paste0(tab_mob_dom_trav_65_plus_non_act_occ$dom, "_", tab_mob_dom_trav_65_plus_non_act_occ$trav, "_", tab_mob_dom_trav_65_plus_non_act_occ$pop)
 
-
+# save.image("C:/Users/nicol/Desktop/Données recensement/prov.RData")
 
 # Etape 1.5 : Flux de mobilité domicile - travail de chaque population et dans chaque commune
 
@@ -102,16 +107,14 @@ tab_mob_intra_com_resist_non_act_occ <- setNames(tab_mob_dom_trav_15_64_non_act_
 tab_mob_intra_com_vuln <- setNames(tab_mob_dom_trav_65_plus_non_act_occ$flux, row.names(tab_mob_dom_trav_65_plus_non_act_occ))
 
 mob_intra_com <- c(tab_mob_intra_com_resist_non_act_occ, tab_mob_intra_com_vuln)
-tab_mob_dom_trav_pop$flux_moins_15 <- setNames(tab_mob_dom_trav_moins_15$flux, row.names(tab_mob_dom_trav_moins_15))[row.names(tab_mob_dom_trav_pop)]
 
 # On supprime les 23 flux nuls
 mob_intra_com <- mob_intra_com[mob_intra_com != 0]
 
 # On ajoute les flux de population intra-communale qui existent déjà à la table de mobilité
 summary(names(mob_intra_com) %in% row.names(tab_mob_dom_trav_pop))
-# Pour les 33870 flux qui existent déjà dans la population active, on les somme
+# Pour les 33871 flux qui existent déjà dans la population active, on les somme
 flux_a_sommer <- mob_intra_com[names(mob_intra_com) %in% row.names(tab_mob_dom_trav_pop)]
-head(grep(names(flux_a_sommer), row.names(tab_mob_dom_trav_pop)))
 
 place_flux_intra <- match(names(flux_a_sommer), row.names(tab_mob_dom_trav_pop))
 tab_mob_dom_trav_pop$flux[place_flux_intra] <- flux_a_sommer + tab_mob_dom_trav_pop$flux[place_flux_intra]
@@ -122,4 +125,7 @@ flux_a_ajouter <- data.frame(dom = substr(names(flux_a_ajouter), 1, 5), trav = s
 tab_mob_dom_trav_pop <- rbind(tab_mob_dom_trav_pop, flux_a_ajouter)
 
 # Sauvegarde des flux de population
-saveRDS(object = tab_mob_dom_trav_pop, file = "flux_pop_jour.rds")
+# Vérification
+summary(duplicated(tab_mob_dom_trav_pop[ , c("dom", "trav")]))
+# Pas de doublon!
+# saveRDS(object = tab_mob_dom_trav_pop, file = "flux_pop_jour.rds")
