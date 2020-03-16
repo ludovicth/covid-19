@@ -125,7 +125,7 @@ pays_init <- lapply(taille_pop, function(taille_pop_clust){
 
 # Etape 4 : fonction de modélisation d'une journée
 
-modele_journee <- function(pays, v_clust, flux_clust, contag, v_prob_sain, liste_prob_contact_dom, liste_prob_contact_trav, mat_contact_trav, mat_contact_dom, d, g, v_prob_grav, v_satur_hop, mat_tx_mort){
+modele_journee <- function(pays, v_clust, v_flux_clust, contag, v_prob_sain, liste_prob_contact_dom, liste_prob_contact_trav, mat_contact_trav, mat_contact_dom, d, g, v_prob_grav, v_satur_hop, mat_tx_mort){
   
   # pays = lapply(setNames(liste_clust, liste_clust), function(x) cluster_test); v_clust = liste_clust; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); liste_prob_contact_dom = liste_prob_contact_dom ; liste_prob_contact_trav = liste_prob_contact_trav ; mat_contact_trav = n_contact_trav ; mat_contact_dom = n_contact_dom ; d = 4; g = 7; v_prob_grav = setNames(c(0.4, 0.1), c("vulnérable", "résistant")); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
   # pays = lapply(setNames(liste_clust, liste_clust), function(x) list(vulnérable = pop_test_2, résistant = pop_test_2) ); v_clust = liste_clust; v_flux_clust = mob_dom_trav_clust; contag = 0.005;  v_prob_sain = setNames(c(0.9, 0.99), c("vulnérable", "résistant")); liste_prob_contact_dom = liste_prob_contact_dom ; liste_prob_contact_trav = liste_prob_contact_trav ; mat_contact_trav = n_contact_trav ; mat_contact_dom = n_contact_dom ; d = 4; g = 7; v_prob_grav = setNames(c(0.4, 0.1), c("vulnérable", "résistant")); v_satur_hop = v_satur_hop; mat_tx_mort = rbind(c(0.9, 0.2), c(0.1, 0.01)); colnames(mat_tx_mort) = c("satur", "normal"); row.names(mat_tx_mort) = c("vulnérable", "résistant")  
@@ -140,17 +140,72 @@ modele_journee <- function(pays, v_clust, flux_clust, contag, v_prob_sain, liste
   
   # Etape 4.2 : départ vers un cluster pour les non contaminés, les malades non déclarés et les porteurs sains
   
-  depart_trav <- lapply(setNames(names(pays), names(pays)), function(clust) depart_clust(nom_cluster = clust, pays[[clust]], flux_clust = v_flux_clust[v_flux_clust$dom == clust, ]))
+  # On commence par calculer les pourcentages de déplacement de chaque population d'un cluster domicile vers les différents clusters de travail
+  tx_flux_pop_dom_vers_trav <- lapply(setNames(names(pays), names(pays)), function(nom_clust){
+    # nom_clust = names(pays)[[2]]
+    v_flux_clust_dom <-  v_flux_clust[v_flux_clust$dom == nom_clust, ]
+    type_pop_clust_dom <- unique(v_flux_clust_dom$pop)
+    
+    lapply(setNames(type_pop_clust_dom, type_pop_clust_dom), function(nom_pop){
+      flux_pop_vers_trav_clust_dom <- setNames(v_flux_clust_dom$flux[v_flux_clust_dom$pop == nom_pop], v_flux_clust_dom$trav[v_flux_clust_dom$pop == nom_pop])
+      flux_pop_vers_trav_clust_dom / sum(flux_pop_vers_trav_clust_dom)
+    })
+  })
+  
+  # On calcule les différents cluster de travail associés au cluster domicile
+  liste_clust_trav_dom <- lapply(setNames(v_clust, v_clust), function(nom_clust){
+    unique(v_flux_clust$trav[v_flux_clust$dom == nom_clust])
+  })
+  
+  # On stocke les différents croisement cluster de travail x population pour chaque cluster domicile
+  liste_pop_dom_vers_trav <- lapply(setNames(names(pays), names(pays)), function(nom_clust_dom){
+    v_flux_clust[v_flux_clust$dom == nom_clust_dom, c("trav", "pop")]
+  })
+  
+  # On calcule les flux de voyageurs de chaque population du cluster domicile se rendant dans les clusters de travail
+  depart_trav <- lapply(setNames(names(pays), names(pays)), function(nom_clust_dom){
+    # nom_clust_dom = names(pays)[1]
+    lapply(setNames(liste_clust_trav_dom[[nom_clust_dom]], liste_clust_trav_dom[[nom_clust_dom]]), function(nom_clust_trav){
+      # nom_clust_trav = liste_clust_trav_dom[[nom_clust_dom]][1]
+      type_pop <- liste_pop_dom_vers_trav[[nom_clust_dom]]$pop[liste_pop_dom_vers_trav[[nom_clust_dom]]$trav == nom_clust_trav]
+      lapply(setNames(type_pop, type_pop), function(nom_pop){
+        # nom_pop = type_pop[1]
+        tx_depla <- unname(tx_flux_pop_dom_vers_trav[[nom_clust_dom]][[nom_pop]][nom_clust_trav])
+        
+        cluster_pop_depla <- pays[[nom_clust_dom]][[nom_pop]]
+        cluster_pop_depla[["non_conta"]] <- cluster_pop_depla[["non_conta"]] * tx_depla
+        cluster_pop_depla[["sains"]] <- cluster_pop_depla[["sains"]] * tx_depla
+        cluster_pop_depla[["non_decl"]] <- cluster_pop_depla[["non_decl"]] * tx_depla
+        cluster_pop_depla[["immu"]] <- cluster_pop_depla[["immu"]] * tx_depla
+        
+        if(nom_clust_dom != nom_clust_trav){
+          cluster_pop_depla[["decl"]] <- setNames(rep(0, length(cluster_pop_depla[["decl"]])),names(cluster_pop_depla[["decl"]]))
+          cluster_pop_depla[["grav"]] <- setNames(rep(0, length(cluster_pop_depla[["grav"]])),names(cluster_pop_depla[["decl"]]))
+          cluster_pop_depla[["mort"]] <- 0
+        }
+        
+        return(cluster_pop_depla)
+        
+      })
+      
+    })
+  })
+  
   
   # Etape 4.3 : Arrivée au travail
+
+  # On calcule les différents cluster de domicile arrivant dans chaque cluster de travail
+  liste_clust_dom_trav <- lapply(setNames(v_clust, v_clust), function(nom_clust){
+    unique(v_flux_clust$dom[v_flux_clust$trav == nom_clust])
+  })
   
   # On calcule la composition du cluster de travail avec l'information sur les clusters d'origine
-  arrivee_trav <- lapply(setNames(names(pays), names(pays)), function(clust_trav){
-    # clust_trav <- names(pays)[1]
-    arrivee_trav_clust_trav <- lapply(depart_trav, function(clust_dom){
-      return(clust_dom[[clust_trav]])
-    })
-    arrivee_trav_clust_trav[!sapply(arrivee_trav_clust_trav, is.null)]
+  arrivee_trav <- lapply(setNames(names(pays), names(pays)), function(nom_clust_trav){
+    # nom_clust_trav <- names(pays)[1]
+    liste_clust_dom <- liste_clust_dom_trav[[nom_clust_trav]]
+    arrivee_trav_clust_trav <- lapply(setNames(liste_clust_dom, liste_clust_dom), function(nom_clust_dom){
+      return(depart_trav[[nom_clust_dom]][[nom_clust_trav]])
+    })    
   })
   
   # Etape 4.4 : Composition du cluster par population durant la journée de travail, sans distinguer le cluster d'origine
@@ -246,15 +301,21 @@ modele_journee <- function(pays, v_clust, flux_clust, contag, v_prob_sain, liste
   
   
   # Etape 4.7 : Arrivée au domicile
-
+  
+  liste_clust_trav_dom <- lapply(setNames(v_clust, v_clust), function(nom_clust){
+    unique(v_flux_clust$trav[v_flux_clust$dom == nom_clust])
+  })
+  
   arrivee_dom <- lapply(setNames(names(pays), names(pays)), function(nom_clust_dom){
     # nom_clust_dom = names(pays)[1]
-    compo_clust_dom <- lapply(retour_trav_contam, function(clust_trav){
-      # clust_trav = retour_trav_contam[[2]]
-      clust_trav[[nom_clust_dom]]
-    })
-    compo_clust_dom[!sapply(compo_clust_dom, is.null)]
     
+    liste_clust_trav <- liste_clust_trav_dom[[nom_clust_dom]]
+
+    compo_clust_dom <- lapply(setNames(liste_clust_trav, liste_clust_trav), function(nom_clust_trav){
+      # nom_clust_trav = liste_clust_trav[2]
+      retour_trav_contam[[nom_clust_trav]][[nom_clust_dom]]
+    })
+
   })
   
   # Etape 4.8 : Agrégation des populations revenant du travail pour donner la composition du cluster
